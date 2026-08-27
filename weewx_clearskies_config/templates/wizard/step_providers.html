@@ -200,45 +200,6 @@
     </fieldset>
     {% endfor %}
 
-    {# Imagery (Phase LM / LM-3) — general-purpose orthophoto imagery for the
-       marine heatmap background, NOT marine-specific (configured like any
-       other external provider, per API-MANUAL §12a). Display-only; never
-       feeds the surf model. Not part of the providers_by_domain() loop above
-       because it isn't in wizard/providers.py's PROVIDERS list (no per-
-       provider auth_fields / connectivity test — api_key here is a single
-       domain-level future-proofing field, not per-provider credentials). #}
-    {% set imagery_provider = state.providers.get("imagery", "auto") %}
-    <fieldset>
-      <legend>{{ _("Imagery") }}</legend>
-      {{ help_trigger("/wizard/help/imagery") }}
-      <p><small>{{ _("Orthophoto imagery shown behind the marine heatmap so visitors can see the beach — piers, guard towers, parking lots — under the wave data.") }}</small></p>
-
-      <label for="provider_imagery">{{ _("Provider") }}</label>
-      <select id="provider_imagery" name="provider_imagery" aria-describedby="imagery-provider-hint">
-        <option value="auto" {% if imagery_provider == "auto" %}selected{% endif %}>
-          {{ _("Auto — NAIP for US locations, ESRI elsewhere") }}
-        </option>
-        <option value="naip" {% if imagery_provider == "naip" %}selected{% endif %}>
-          {{ _("NAIP — US only, public domain, cached") }}
-        </option>
-        <option value="esri" {% if imagery_provider == "esri" %}selected{% endif %}>
-          {{ _("ESRI World Imagery — global, attribution required") }}
-        </option>
-      </select>
-      <small id="imagery-provider-hint">
-        {{ _("Auto picks NAIP for US locations and falls back to ESRI World Imagery everywhere else. You can change this later in the admin interface.") }}
-      </small>
-
-      <label for="imagery_api_key" style="margin-block-start:0.75rem">{{ _("API key") }}</label>
-      <input type="text" id="imagery_api_key" name="imagery_api_key"
-             value="{{ state.imagery_api_key }}"
-             autocomplete="off"
-             aria-describedby="imagery-api-key-hint">
-      <small id="imagery-api-key-hint">
-        {{ _("Optional. NAIP and ESRI World Imagery do not require an API key. Reserved for a future imagery provider that does.") }}
-      </small>
-    </fieldset>
-
     {# Marine Service (T7.1/T7.2) — the connection to the marine companion
        service.  This is not a data provider the dashboard consumes, and it is
        not a compute-offload option: the marine service is an add-on to the API
