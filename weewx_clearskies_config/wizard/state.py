@@ -178,15 +178,6 @@ class WizardState:
     librewxr_endpoint: str = "https://api.librewxr.net"
     librewxr_bounds: str = ""  # "south,west,north,east" or empty for global
 
-    # Imagery provider (Phase LM / LM-3) — general-purpose orthophoto imagery
-    # for the marine heatmap background, not marine-specific. The provider
-    # choice itself (auto|naip|esri) lives in `providers["imagery"]`, same
-    # mechanism as forecast/alerts/aqi/earthquakes/radar. api_key is a
-    # separate domain-level field (not per-provider, unlike aeris/openweathermap
-    # credentials) because it is future-proofing shared across all three
-    # provider values, per API-MANUAL §12a — NAIP/ESRI do not use it in v1.
-    imagery_api_key: str = ""
-
     # AQI regional configuration (ADR-059) — provider-specific scale selectors.
     # Persisted in wizard state and sent to the API via POST /setup/apply under
     # the providers.aqi entry so the API can write them to [providers.aqi] in

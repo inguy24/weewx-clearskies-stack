@@ -2110,20 +2110,11 @@ async def step6_post(request: Request) -> HTMLResponse:
     state = get_wizard_state(session_id)
 
     providers: dict[str, str] = {}
-    for domain in ("forecast", "alerts", "aqi", "earthquakes", "radar", "imagery"):
+    for domain in ("forecast", "alerts", "aqi", "earthquakes", "radar"):
         provider_id = str(form.get(f"provider_{domain}", "")).strip()
         if provider_id:
             providers[domain] = provider_id
-    # Imagery has no "unset" state in the UI (the <select> always has a value,
-    # unlike the radio-per-provider domains) — default to "auto" if the field
-    # was somehow omitted from the submission (API-MANUAL §12a default).
-    if "imagery" not in providers:
-        providers["imagery"] = "auto"
     state.providers = providers
-
-    # Imagery API key (Phase LM / LM-3) — domain-level field, not per-provider
-    # credentials (see WizardState.imagery_api_key docstring).
-    state.imagery_api_key = str(form.get("imagery_api_key", "")).strip()
 
     # Collect inline API keys submitted alongside the provider selection.
     # Form fields are namespaced "{provider_id}_{field_name}".
@@ -4164,17 +4155,6 @@ async def wizard_apply(request: Request) -> HTMLResponse:
         # is non-zero (0 means "disabled" — omit rather than send a no-op).
         if domain == "alerts" and state.marine_alert_radius_miles > 0:
             provider_entry["marine_alert_radius_miles"] = state.marine_alert_radius_miles
-        # Imagery API key (Phase LM / LM-3) — future-proofing field, unused by
-        # NAIP/ESRI in v1 (API-MANUAL §12a). KNOWN GAP: the API's
-        # /setup/apply _provider_secrets() helper has no branch for the
-        # "imagery" domain, so this value is currently written into the
-        # ApplyRequest but silently dropped by the API rather than persisted
-        # to api.conf [imagery] api_key — tracked as an API-repo follow-up.
-        # Sent anyway (matches plan LM-3(b): the field must exist and accept
-        # a value without blocking submission) — the *provider* selection
-        # above round-trips correctly today; only this field is affected.
-        if domain == "imagery" and state.imagery_api_key:
-            provider_entry["api_key"] = state.imagery_api_key
         api_providers[domain] = provider_entry
 
     api_payload: dict[str, Any] = {
