@@ -311,6 +311,23 @@ def _fetch_geographic_features_status() -> dict | None:
         return None
 
 
+def _fetch_basemap_status() -> dict | None:
+    """Fetch basemap status from the API.
+
+    Returns the API's basemap/status response dict, or None if the API is
+    unreachable or not configured.
+    """
+    client = _get_api_client()
+    if client is None:
+        return None
+    try:
+        response = client._request("GET", "/api/v1/basemap/status")
+        return response.json()
+    except Exception:  # noqa: BLE001
+        logger.warning("Could not fetch basemap status from API", exc_info=True)
+        return None
+
+
 def _fetch_forecast_correction_status() -> dict | None:
     """Fetch forecast correction status from the API.
 
@@ -970,6 +987,13 @@ _CUSTOM_SECTIONS: list[dict] = [
         "description": "OpenStreetMap boundaries, roads, and water for the satellite map overlay.",
     },
     {
+        "section_id": "basemap",
+        "display_name": "Basemap",
+        "group": "advanced",
+        "url": "/admin/basemap",
+        "description": "The map ground under every Clear Skies map: world, local and radar tiers extracted from OpenStreetMap data (Protomaps).",
+    },
+    {
         "section_id": "forecast-correction",
         "display_name": "Forecast Correction",
         "group": "advanced",
@@ -1146,6 +1170,24 @@ async def admin_landing(request: Request) -> HTMLResponse | RedirectResponse:
     else:
         geo_rows.append(("Status", "Not downloaded"))
     custom_landing_values["geographic-features"] = geo_rows
+
+    # Basemap summary
+    basemap_status = _fetch_basemap_status()
+    basemap_rows: list[tuple[str, Any]] = []
+    if basemap_status is None:
+        basemap_rows.append(("Status", "API unreachable"))
+    else:
+        for tier_id, tier_label in (("world", "World"), ("local", "Local"), ("radar", "Radar")):
+            tier = basemap_status.get(tier_id) or {}
+            if tier.get("available"):
+                size_bytes = tier.get("size_bytes")
+                size_str = f"{size_bytes / (1024 * 1024):.1f} MB" if size_bytes else "unknown size"
+                basemap_rows.append((tier_label, f"Available ({size_str})"))
+            else:
+                basemap_rows.append((tier_label, "Not extracted"))
+        if basemap_status.get("updating"):
+            basemap_rows.append(("Status", "Updating…"))
+    custom_landing_values["basemap"] = basemap_rows
 
     # Marine locations summary (T6.2)
     marine_config = _fetch_current_config()
@@ -1646,6 +1688,55 @@ async def geographic_features_update(request: Request) -> HTMLResponse:
     return _render(request, "geographic_features.html", {
         "status": _fetch_geographic_features_status(),
         "error": error,
+    }, status_code=500 if error else 200)
+
+
+# ---------------------------------------------------------------------------
+# M1 — Basemap (Protomaps) admin
+# ---------------------------------------------------------------------------
+
+
+@router.get("/basemap", response_class=HTMLResponse)
+async def basemap_get(request: Request) -> HTMLResponse:
+    """Render the basemap status page."""
+    _require_session(request)
+    status = _fetch_basemap_status()
+    error: str | None = None
+    if status is None:
+        error = _("Cannot connect to the API — check that the API is running and configured.")
+    return _render(request, "basemap.html", {
+        "status": status,
+        "error": error,
+    })
+
+
+@router.post("/basemap/update", response_class=HTMLResponse)
+async def basemap_update(request: Request) -> HTMLResponse:
+    """Trigger a basemap extract (world/local/radar tiers) via the API."""
+    _require_session(request)
+    from weewx_clearskies_config.wizard.api_client import ApiClientError
+    client = _get_api_client()
+    error: str | None = None
+    flash: str | None = None
+    if client is None:
+        error = _("Cannot connect to the API — check that the API is running and configured.")
+    else:
+        try:
+            client._request("POST", "/setup/basemap/update")
+            flash = _("Basemap update started — this page refreshes while it runs.")
+        except ApiClientError as exc:
+            if exc.status_code == 409:
+                flash = _("A basemap update is already running.")
+            else:
+                error = _("API error: {detail}").format(detail=exc.detail)
+                logger.warning("basemap_update API error: %s", exc)
+        except Exception as exc:  # noqa: BLE001
+            error = _("API error: {detail}").format(detail=exc)
+            logger.warning("basemap_update API error: %s", exc)
+    return _render(request, "basemap.html", {
+        "status": _fetch_basemap_status(),
+        "error": error,
+        "flash": flash,
     }, status_code=500 if error else 200)
 
 

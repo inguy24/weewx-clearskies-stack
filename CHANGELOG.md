@@ -11,6 +11,23 @@ Pre-1.0: minor version bumps may include breaking changes. Read this file before
 
 ---
 
+## [Unreleased]
+
+### Added
+
+**Basemap admin section (MARINE-AND-MAPS-PLAN M1-STACK)**
+
+- `GET /admin/basemap` + `POST /admin/basemap/update` — status table (world/local/radar
+  tiers: availability, size, zoom range, last updated) and a one-action "Update Basemap"
+  trigger against the API's `/api/v1/basemap/status` and `POST /setup/basemap/update`.
+  Async: 202 shows a "started" flash and the page polls every 10s while `updating` is
+  true; 409 shows an "already running" flash; the update button is disabled while an
+  extract is in progress; a `last_error` renders as an alert.
+- `templates/admin/basemap.html`, help content `help.admin.basemap.*` in all 13 locales,
+  `docs/OPERATOR-MANUAL.md` "Basemap" subsection.
+- No operator-typed bounds or zoom fields — the extract's extent comes from the station,
+  earthquake radius, and marine locations already in the API's config (directive 14).
+
 ## [0.1.0] — 2026-05-19
 
 First public release.

@@ -1,0 +1,198 @@
+{# -------------------------------------------------------------------------
+   Basemap (Protomaps) status and update trigger.
+   Loaded via HTMX into #admin-content.
+   Context:
+     status  — API response dict (or None if API is unreachable) with keys:
+                 world, local, radar — each a dict with:
+                   available    — bool, whether the tier's PMTiles file is present
+                   size_bytes   — int|null, file size in bytes
+                   updated_at   — str|null, ISO-8601 timestamp of last update
+                   bounds       — [minlon, minlat, maxlon, maxlat]|null
+                   minzoom      — int|null
+                   maxzoom      — int|null
+                 updating         — bool, extract running now
+                 last_error       — str|null
+                 last_started_at  — str|null, ISO-8601 timestamp
+                 last_finished_at — str|null, ISO-8601 timestamp
+     error   — str|null, error message if API is unreachable
+     flash   — str|null, message after a completed POST (started / already running)
+   Triggers extract via POST /admin/basemap/update (async — the API runs it
+   in the background; this page polls while status.updating is true).
+   ------------------------------------------------------------------------- #}
+{% from "macros/help_panel.html" import help_trigger %}
+<article>
+  <header>
+    <nav aria-label="{{ _('Breadcrumb') }}">
+      <ul>
+        <li>
+          <a href="/admin"
+             hx-get="/admin"
+             hx-target="#admin-content"
+             hx-swap="innerHTML"
+             hx-push-url="true">{{ _("Admin") }}</a>
+        </li>
+        <li>{{ _("Basemap") }}</li>
+      </ul>
+    </nav>
+    <h2>{{ _("Basemap") }}</h2>
+    {{ help_trigger("/admin/help/basemap") }}
+  </header>
+
+  <p>
+    {{ _("The map ground under every Clear Skies map: world, local and radar tiers
+    extracted from OpenStreetMap data (Protomaps). The data is stored as PMTiles
+    files on the API host and served to the dashboard on demand.") }}
+  </p>
+
+  {% if flash %}
+  <div role="status"
+       style="background:color-mix(in srgb,var(--pico-color-green-500,#22c55e) 12%,transparent);
+              border:1px solid var(--pico-color-green-500,#22c55e);
+              padding:0.75rem 1rem;border-radius:var(--pico-border-radius);
+              margin-block:1rem;font-size:0.875rem">
+    {{ flash }}
+  </div>
+  {% endif %}
+
+  {# Status section #}
+  <section aria-labelledby="basemap-status-heading"
+           {% if status and status.get("updating") %}
+           hx-get="/admin/basemap"
+           hx-trigger="every 10s"
+           hx-target="#admin-content"
+           hx-swap="innerHTML"
+           {% endif %}>
+    <h3 id="basemap-status-heading">{{ _("Current Status") }}</h3>
+
+    {% if error %}
+      <div role="alert" class="admin-alert admin-alert-warning">
+        <strong>{{ _("Status unavailable.") }}</strong>
+        {{ error }}
+      </div>
+    {% elif status is none %}
+      <div role="alert" class="admin-alert admin-alert-warning">
+        <strong>{{ _("Status unavailable.") }}</strong>
+        {{ _("The API is unreachable or not yet configured. Start the API service and
+        reload this page to view basemap status.") }}
+      </div>
+    {% else %}
+      {% if status.get("updating") %}
+      <p role="status" style="font-size:0.875rem">
+        {{ _("Update in progress (started {started}).").format(started=status.get("last_started_at")) }}
+      </p>
+      {% endif %}
+
+      {% if status.get("last_error") %}
+      <div role="alert" class="admin-alert admin-alert-warning">
+        <strong>{{ _("Last update failed.") }}</strong>
+        {{ status.get("last_error") }}
+      </div>
+      {% endif %}
+
+      <table>
+        <thead>
+          <tr>
+            <th scope="col">{{ _("Tier") }}</th>
+            <th scope="col">{{ _("Availability") }}</th>
+            <th scope="col">{{ _("Size") }}</th>
+            <th scope="col">{{ _("Zoom range") }}</th>
+            <th scope="col">{{ _("Last updated") }}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for tier_id, tier_name in [("world", _("World")), ("local", _("Local")), ("radar", _("Radar"))] %}
+          {% set tier = status.get(tier_id) or {} %}
+          <tr>
+            <th scope="row">{{ tier_name }}</th>
+            <td>
+              {% if tier.get("available") %}
+                <span aria-label="{{ _('Available') }}"
+                      style="display:inline-flex;align-items:center;gap:0.4rem">
+                  <span aria-hidden="true"
+                        style="display:inline-block;width:0.7rem;height:0.7rem;
+                               border-radius:50%;background:var(--pico-color-green-500,#22c55e)"></span>
+                  {{ _("Available") }}
+                </span>
+              {% else %}
+                <span aria-label="{{ _('Not extracted') }}"
+                      style="display:inline-flex;align-items:center;gap:0.4rem">
+                  <span aria-hidden="true"
+                        style="display:inline-block;width:0.7rem;height:0.7rem;
+                               border-radius:50%;background:var(--pico-muted-color,#9ca3af)"></span>
+                  {{ _("Not extracted") }}
+                </span>
+              {% endif %}
+            </td>
+            <td>
+              {% if tier.get("size_bytes") %}
+                {{ "%.1f"|format(tier.size_bytes / (1024 * 1024)) }} MB
+              {% else %}
+                —
+              {% endif %}
+            </td>
+            <td>
+              {% if tier.get("minzoom") is not none and tier.get("maxzoom") is not none %}
+                {{ tier.minzoom }}–{{ tier.maxzoom }}
+              {% else %}
+                —
+              {% endif %}
+            </td>
+            <td>
+              {% if tier.get("updated_at") %}
+                {{ tier.updated_at[:10] if tier.updated_at|length >= 10 else tier.updated_at }}
+              {% else %}
+                —
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% endif %}
+  </section>
+
+  {# Update trigger #}
+  <section aria-labelledby="basemap-update-heading" style="margin-block-start:1.5rem">
+    <h3 id="basemap-update-heading">{{ _("Update Basemap") }}</h3>
+    <p style="font-size:0.875rem;color:var(--pico-muted-color)">
+      {{ _("Extracts three files on the API host (world, local, radar) from the
+      Protomaps daily build — typically under a minute; the local file for this
+      install measured about 500 MB.") }}
+    </p>
+    <form hx-post="/admin/basemap/update"
+          hx-target="#admin-content"
+          hx-swap="innerHTML"
+          hx-indicator="#basemap-spinner">
+      <div role="group">
+        <button type="submit"
+                id="basemap-update-btn"
+                aria-describedby="basemap-update-hint"
+                {% if status and status.get("updating") %}disabled{% endif %}>
+          {{ _("Update Basemap") }}
+        </button>
+        <span id="basemap-spinner"
+              class="htmx-indicator"
+              aria-live="polite"
+              style="font-size:0.875rem;color:var(--pico-muted-color);align-self:center">
+          {{ _("Starting…") }}
+        </span>
+      </div>
+      <small id="basemap-update-hint" style="display:block;margin-block-start:0.5rem">
+        {{ _("Only one update runs at a time. If an update is already in progress, this
+        button is disabled until it finishes.") }}
+      </small>
+    </form>
+  </section>
+
+  <div style="margin-block-start:1.5rem">
+    <a href="/admin"
+       hx-get="/admin"
+       hx-target="#admin-content"
+       hx-swap="innerHTML"
+       hx-push-url="true"
+       role="button"
+       class="outline secondary">{{ _("Back to Admin") }}</a>
+  </div>
+
+</article>
+</content>

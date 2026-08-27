@@ -860,6 +860,10 @@ The **Forecast Correction** section controls the machine-learning system that le
 
 The **Geographic Features** section lets you download and manage the vector map overlay that appears on the satellite and radar views. This overlay shows borders, coastlines, city labels, and geographic context from OpenStreetMap data in PMTiles format. Click **Update Map Data** to download — this is a one-time operation. Update periodically (every few months) for the latest map data.
 
+### Basemap
+
+The **Basemap** section extracts the map ground — water, land, coastlines, administrative boundaries, place labels, and major roads — used by every Clear Skies map on your weather site: the marine map, the seismic map, the radar/satellite map, and the surf height map. The data comes from OpenStreetMap (via Protomaps) and is stored as three PMTiles files on the API host: a world tier (low detail, global fallback), a local tier (detailed, covering your station's area), and a radar tier (covering the radar provider's coverage area). Clear Skies extracts and serves these itself — no external map provider is required. The local tier's coverage is derived automatically from your station location, the earthquake search radius, and your configured marine locations — never typed in directly. The radar tier covers the radar provider's declared coverage box, or falls back to the station area when the provider does not declare one. Click **Update Basemap** to re-extract all three tiers; only one update runs at a time. Run once after initial setup, and re-run after changing the station location, the earthquake radius, the marine locations, or the radar coverage bounds.
+
 ### Marine locations
 
 The **Marine Locations** section manages marine, surf, fishing, and beach safety locations after initial setup — the ongoing counterpart to the setup wizard's Marine Locations step. Each location has a name, coordinates, one or more activities (Marine/Boating, Surf, Fishing, Beach Safety), and activity-specific fields (surf beach-facing direction/bottom type/topographic feature, fishing target category, beach safety links).
