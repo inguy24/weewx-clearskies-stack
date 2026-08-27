@@ -15,6 +15,22 @@ Pre-1.0: minor version bumps may include breaking changes. Read this file before
 
 ### Removed
 
+**Geographic Features admin section (MARINE-AND-MAPS-PLAN M5, ADR-078 Amendment 2)**
+
+- Admin "Geographic Features" section — `_fetch_geographic_features_status()` helper,
+  the `admin/routes.py` landing card entry and landing status rows, and the two routes
+  `GET /admin/geographic-features` / `POST /admin/geographic-features/update` — removed.
+- `templates/admin/geographic_features.html` removed.
+- Help content `help.admin.geographic_features.*` (3 keys) and the 5 orphaned
+  literal-string translation entries the deleted template used (`"Geographic Features"`,
+  `"Geographic features data updated successfully."`, and 3 longer descriptive strings)
+  removed from all 13 locale files.
+- `templates/admin/marine.html` header comment's reference to the deleted template's
+  name reworded.
+- The single-file OpenStreetMap PMTiles overlay this section managed is superseded by
+  the Basemap section's three-tier extraction (MARINE-AND-MAPS-PLAN M1); Basemap is
+  unaffected by this round.
+
 **Imagery provider admin section + wizard field (MARINE-AND-MAPS-PLAN M4-B, Q10-6)**
 
 - Admin "Imagery" config section (`/admin/config/api/imagery`) and its dedicated
