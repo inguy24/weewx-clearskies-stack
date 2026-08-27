@@ -24,8 +24,10 @@ Covers:
       a source-inspection KAT (wizard_apply is a large integration route
       with real network side effects, not practical to exercise end-to-end
       in this suite -- same documented rationale as
-      test_wizard_imagery.py::test_apply_payload_generic_provider_loop_covers_imagery_domain
-      and test_wizard_earthquake_config.py::test_apply_payload_uses_default_radius_km_key);
+      test_wizard_earthquake_config.py::test_apply_payload_uses_default_radius_km_key
+      (test_wizard_imagery.py's precedent of the same rationale was removed
+      2026-08-27, M4-B, Q10-6 -- the imagery wizard fieldset it tested no
+      longer exists));
       (e) is a route-level behavioral test of the flag itself.
 """
 
@@ -266,11 +268,12 @@ def test_apply_payload_swan_gate_requires_step_completed_source():
     """Source-inspection KAT: wizard_apply() is a large integration route
     with real network side effects (client.apply(), local file writes) --
     not practical to exercise end-to-end in this suite, same rationale as
-    test_wizard_imagery.py and test_wizard_earthquake_config.py's
-    apply-payload tests. Pre-change, the swan-block condition has no
-    reference to swan_step_completed anywhere in this bounded span, so this
-    assertion is genuinely falsifiable against the prior unconditional-send
-    behavior (C9)."""
+    test_wizard_earthquake_config.py's apply-payload tests
+    (test_wizard_imagery.py carried the same rationale before it was
+    removed 2026-08-27, M4-B, Q10-6). Pre-change, the swan-block condition
+    has no reference to swan_step_completed anywhere in this bounded span,
+    so this assertion is genuinely falsifiable against the prior
+    unconditional-send behavior (C9)."""
     import weewx_clearskies_config.wizard.routes as routes_mod
 
     source = inspect.getsource(routes_mod.wizard_apply)
