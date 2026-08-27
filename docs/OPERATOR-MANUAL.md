@@ -822,7 +822,7 @@ Each provider category (Forecast, Alerts, AQI, Earthquakes, Radar) has its own s
 - Test the connection using the **Test** button
 - Save changes
 
-The change takes effect after saving. If you switch forecast providers while the forecast correction engine is enabled, the training data resets because bias patterns differ between providers.
+The change takes effect after saving. If you switch forecast providers while the forecast correction engine is enabled, the training data resets because bias patterns differ between providers. (There was previously an Imagery provider selector here and in the setup wizard's provider step, choosing the aerial-photo source behind the marine heatmap — removed 2026-08-27 (Q10-6) now that the marine heatmap uses the Clear Skies product basemap instead.)
 
 ### Changing the appearance
 

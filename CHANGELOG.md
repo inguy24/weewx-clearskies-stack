@@ -13,6 +13,22 @@ Pre-1.0: minor version bumps may include breaking changes. Read this file before
 
 ## [Unreleased]
 
+### Removed
+
+**Imagery provider admin section + wizard field (MARINE-AND-MAPS-PLAN M4-B, Q10-6)**
+
+- Admin "Imagery" config section (`/admin/config/api/imagery`) and its dedicated
+  `imagery_section.html` template, removed.
+- Setup wizard step 6 (Providers & API Keys) "Imagery" fieldset — provider select
+  (auto/naip/esri) and API key field — removed.
+- `wizard/state.py` `WizardState.imagery_api_key` field removed.
+- Help content `help.admin.imagery-provider.*` / `help.wizard.imagery.*` removed
+  from `en.json` (the only locale that carried them).
+- The API's `/imagery/config` endpoint (product basemap for the surf height map)
+  and the wizard marine-step Esri satellite toggle (operator-only, direct browser
+  URL) are unaffected — this round removes only the now-unreachable provider
+  selection UI (PA9 extended; operator: "if we dont need it then get rid of it").
+
 ### Added
 
 **Basemap admin section (MARINE-AND-MAPS-PLAN M1-STACK)**
