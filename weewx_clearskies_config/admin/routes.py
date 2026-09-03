@@ -63,6 +63,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
+from weewx_clearskies_config import __version__ as _STACK_VERSION
 from weewx_clearskies_config.auth import COOKIE_NAME, SessionManager
 from weewx_clearskies_config.config.reader import (
     get_all_sections,
@@ -3984,6 +3985,14 @@ async def marine_service_test(request: Request) -> HTMLResponse:
 # fixed here so the panel always lists them in the same order regardless of
 # JSON key ordering in the response.
 _MARINE_HEALTH_INPUT_NAMES: tuple[str, ...] = ("ww3_boundary", "wind", "bathymetry", "tide")
+_MODEL_HEALTH_STAGE_NAMES: tuple[str, ...] = (
+    "providerInputs", "ww3Leg", "ww3Horizon", "boundaryMerge", "swan",
+    "swellTrack", "cache", "publication", "recovery",
+)
+_MODEL_HEALTH_RUNTIME_NAMES: tuple[str, ...] = (
+    "marinePackage", "swanBinarySha256", "ww3PinIdentity",
+    "modelConfigGeneration", "gridGeneration",
+)
 
 
 def _format_age_seconds(age_s: Any) -> str | None:
@@ -4009,6 +4018,13 @@ def _format_age_seconds(age_s: Any) -> str | None:
         return f"{hours}h {minutes}m"
     days, hours = divmod(hours, 24)
     return f"{days}d {hours}h"
+
+
+def _model_health_reason_codes(value: Any) -> list[str] | None:
+    """Accept only the model ledger's documented list-of-strings shape."""
+    if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
+        return None
+    return list(value)
 
 
 def _status_context() -> dict[str, Any]:
@@ -4037,6 +4053,17 @@ def _status_context() -> dict[str, Any]:
         "marine_inputs_reported": False,
         "marine_invariants": None,
         "marine_invariants_reported": False,
+        "marine_model_health_reported": False,
+        "marine_model_health_unavailable": False,
+        "marine_model_overall": None,
+        "marine_model_serving": None,
+        "marine_model_attempt": None,
+        "marine_model_attempt_terminal": False,
+        "marine_model_other_attempts": [],
+        "marine_model_runtime": [],
+        "marine_model_stages": [],
+        "marine_model_current_forcing": None,
+        "marine_component_matrix": [],
     }
 
     client = _get_api_client()
@@ -4121,6 +4148,228 @@ def _status_context() -> dict[str, Any]:
             "last_fired_at": invariants_raw.get("last_fired_at"),
             "last_fired_names": [str(n) for n in names] if isinstance(names, list) else [],
         }
+
+    model_health = health.get("modelHealth")
+    if not isinstance(model_health, dict):
+        return context
+    if model_health.get("schemaVersion") != 1:
+        context["marine_model_health_unavailable"] = True
+        return context
+    stages_raw = model_health.get("stages")
+    overall_raw = model_health.get("overall")
+    serving_raw = model_health.get("serving")
+    attempts_raw = model_health.get("attempts")
+    if not all(isinstance(value, dict) for value in (
+        stages_raw, overall_raw, serving_raw, attempts_raw,
+    )):
+        context["marine_model_health_unavailable"] = True
+        return context
+
+    overall_reasons = _model_health_reason_codes(overall_raw.get("reasonCodes", []))
+    serving_reasons = _model_health_reason_codes(serving_raw.get("reasonCodes", []))
+    if overall_reasons is None or serving_reasons is None:
+        context["marine_model_health_unavailable"] = True
+        return context
+    context["marine_model_health_reported"] = True
+    context["marine_model_overall"] = {
+        "state": str(overall_raw.get("state") or "unknown"),
+        "reasons": overall_reasons,
+    }
+    serving_age = serving_raw.get("ageSeconds")
+    context["marine_model_serving"] = {
+        "state": str(serving_raw.get("state") or "unavailable"),
+        "reasons": serving_reasons,
+        "selected_cycle": serving_raw.get("selectedFullCycleId"),
+        "model_time": serving_raw.get("modelTime"),
+        "first_valid": serving_raw.get("firstValidTime"),
+        "last_valid": serving_raw.get("lastValidTime"),
+        "age_seconds": serving_age,
+        "age_human": _format_age_seconds(serving_age),
+        "last_good_fallback": serving_raw.get("lastGoodFallback") is True,
+    }
+    active_attempt = attempts_raw.get("active")
+    selected_attempt = active_attempt if isinstance(active_attempt, dict) else None
+    terminal_attempt = False
+    if selected_attempt is None:
+        latest_by_kind = attempts_raw.get("latestByKind")
+        if isinstance(latest_by_kind, dict):
+            production_candidates = [
+                attempt for kind, attempt in latest_by_kind.items()
+                if kind in {"full", "fast"} and isinstance(attempt, dict)
+            ]
+            candidates = production_candidates or [
+                attempt for attempt in latest_by_kind.values()
+                if isinstance(attempt, dict)
+            ]
+            selected_attempt = max(
+                candidates,
+                key=lambda attempt: str(attempt.get("endedAt") or ""),
+                default=None,
+            )
+            terminal_attempt = selected_attempt is not None
+            context["marine_model_other_attempts"] = [
+                {
+                    "attempt_id": attempt.get("attemptId"),
+                    "kind": attempt.get("kind"),
+                    "state": attempt.get("state"),
+                    "reasons": [str(reason) for reason in attempt.get("reasonCodes", [])
+                                if isinstance(reason, str)]
+                    if isinstance(attempt.get("reasonCodes"), list) else [],
+                }
+                for attempt in latest_by_kind.values()
+                if isinstance(attempt, dict) and attempt is not selected_attempt
+            ]
+    if isinstance(selected_attempt, dict):
+        context["marine_model_attempt"] = {
+            "attempt_id": selected_attempt.get("attemptId"),
+            "kind": selected_attempt.get("kind"),
+            "state": selected_attempt.get("state"),
+            "started_at": selected_attempt.get("startedAt"),
+            "ended_at": selected_attempt.get("endedAt"),
+            "reasons": [str(reason) for reason in selected_attempt.get("reasonCodes", [])
+                        if isinstance(reason, str)]
+            if isinstance(selected_attempt.get("reasonCodes"), list) else [],
+        }
+        context["marine_model_attempt_terminal"] = terminal_attempt
+        runtime = selected_attempt.get("runtime")
+        if runtime is not None and not isinstance(runtime, dict):
+            context["marine_model_health_unavailable"] = True
+            context["marine_model_health_reported"] = False
+            return context
+        if isinstance(runtime, dict):
+            context["marine_model_runtime"] = [
+                {"name": name, "value": runtime.get(name)}
+                for name in _MODEL_HEALTH_RUNTIME_NAMES
+                if isinstance(runtime.get(name), str) and runtime[name]
+            ]
+    for name in _MODEL_HEALTH_STAGE_NAMES:
+        stage = stages_raw.get(name)
+        if not isinstance(stage, dict):
+            continue
+        coverage = stage.get("coverage")
+        provenance = stage.get("provenance")
+        reasons_raw = stage.get("reasonCodes", [])
+        if not isinstance(reasons_raw, list) or not isinstance(coverage, dict) or (
+            provenance is not None and not isinstance(provenance, dict)
+        ):
+            context["marine_model_health_unavailable"] = True
+            context["marine_model_health_reported"] = False
+            return context
+        source = provenance.get("source") if isinstance(provenance, dict) else None
+        if not isinstance(source, str) or not re.fullmatch(r"[A-Za-z0-9_.:-]+", source):
+            source = provenance.get("sourceCycle") if isinstance(provenance, dict) else None
+        if not isinstance(source, str) or not re.fullmatch(r"[A-Za-z0-9_.:-]+", source):
+            source = None
+        context["marine_model_stages"].append({
+            "name": name,
+            "state": str(stage.get("state") or "unknown"),
+            "reasons": [str(reason) for reason in reasons_raw
+                        if isinstance(reason, str)],
+            "required_start": coverage.get("requiredStart") if isinstance(coverage, dict) else None,
+            "required_end": coverage.get("requiredEnd") if isinstance(coverage, dict) else None,
+            "actual_start": coverage.get("actualStart") if isinstance(coverage, dict) else None,
+            "actual_end": coverage.get("actualEnd") if isinstance(coverage, dict) else None,
+            "complete": coverage.get("complete") is True if isinstance(coverage, dict) else False,
+            "source": source,
+        })
+        if name in {"providerInputs", "swan"}:
+            children = stage.get("children")
+            if isinstance(children, dict):
+                for child_name, child in children.items():
+                    if not isinstance(child_name, str) or not isinstance(child, dict):
+                        continue
+                    child_coverage = child.get("coverage")
+                    child_provenance = child.get("provenance")
+                    child_reasons = child.get("reasonCodes", [])
+                    if not isinstance(child_reasons, list) or not isinstance(child_coverage, dict) or (
+                        child_provenance is not None and not isinstance(child_provenance, dict)
+                    ):
+                        context["marine_model_health_unavailable"] = True
+                        context["marine_model_health_reported"] = False
+                        return context
+                    child_source = child_provenance.get("source") if isinstance(child_provenance, dict) else None
+                    if not isinstance(child_source, str) or not re.fullmatch(r"[A-Za-z0-9_.:-]+", child_source):
+                        child_source = child_provenance.get("sourceCycle") if isinstance(child_provenance, dict) else None
+                    if not isinstance(child_source, str) or not re.fullmatch(r"[A-Za-z0-9_.:-]+", child_source):
+                        child_source = None
+                    context["marine_model_stages"].append({
+                        "name": child_name,
+                        "state": str(child.get("state") or "unknown"),
+                        "reasons": [str(reason) for reason in child_reasons if isinstance(reason, str)],
+                        "required_start": child_coverage.get("requiredStart"),
+                        "required_end": child_coverage.get("requiredEnd"),
+                        "actual_start": child_coverage.get("actualStart"),
+                        "actual_end": child_coverage.get("actualEnd"),
+                        "complete": child_coverage.get("complete") is True,
+                        "source": child_source,
+                    })
+
+    current_forcing = health.get("currentForcing")
+    if isinstance(current_forcing, dict):
+        cycles = current_forcing.get("cycles")
+        status = current_forcing.get("status")
+        held_tail_hours = current_forcing.get("heldTailHours")
+        refusal = current_forcing.get("refusal")
+        coverage_start = current_forcing.get("coverageStart")
+        coverage_end = current_forcing.get("coverageEnd")
+        if (
+            status in {"available", "unavailable"}
+            and isinstance(cycles, list)
+            and all(
+                isinstance(cycle, str)
+                and re.fullmatch(r"[A-Za-z0-9_.:-]+", cycle)
+                for cycle in cycles
+            )
+            and isinstance(held_tail_hours, int)
+            and not isinstance(held_tail_hours, bool)
+            and held_tail_hours >= 0
+            and (refusal is None or (
+                isinstance(refusal, str)
+                and re.fullmatch(r"[A-Za-z0-9_.:-]+", refusal)
+            ))
+            and (coverage_start is None or (
+                isinstance(coverage_start, str)
+                and re.fullmatch(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z", coverage_start)
+            ))
+            and (coverage_end is None or (
+                isinstance(coverage_end, str)
+                and re.fullmatch(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z", coverage_end)
+            ))
+        ):
+            context["marine_model_current_forcing"] = {
+                "status": status,
+                "cycles": cycles,
+                "coverage_start": coverage_start,
+                "coverage_end": coverage_end,
+                "held_tail_hours": held_tail_hours,
+                "refusal": refusal,
+            }
+
+    component_matrix = health.get("componentMatrix")
+    supplied_components = component_matrix if isinstance(component_matrix, dict) else {}
+    defaults = {
+        "marine": {
+            "reachable": context["marine_reachable"] is True,
+            "buildState": context["marine_status"] or "unknown",
+            "revision": context["marine_version"],
+        },
+        "api": {"reachable": context["api_reachable"], "buildState": "unknown", "revision": None},
+        "dashboard": {"reachable": None, "buildState": "unknown", "revision": None},
+        "stack": {"reachable": True, "buildState": "ok", "revision": _STACK_VERSION},
+    }
+    for name in ("marine", "api", "dashboard", "stack"):
+        component = supplied_components.get(name)
+        if not isinstance(component, dict):
+            component = defaults[name]
+        context["marine_component_matrix"].append({
+            "name": name,
+            "reachable": (
+                component.get("reachable")
+                if isinstance(component.get("reachable"), bool) else None
+            ),
+            "build_state": str(component.get("buildState") or "unknown"),
+            "revision": component.get("revision") if isinstance(component.get("revision"), str) else None,
+        })
 
     return context
 

@@ -890,6 +890,28 @@ The **Marine Service** section manages the connection between the API and the ex
 
 Use **Test Connection** to verify the API can reach the marine service at the configured URL before saving. If the most recent wizard apply pushed marine configuration to the service and the push failed, a warning is shown here.
 
+### Status: model health
+
+The read-only **Status** panel obtains marine health only through the API. Its Model health section distinguishes the API transport from the marine model result: it shows the selected last-good serving state (`valid`, `stale`, or `unavailable`), the original model time and age, active or latest terminal attempt, compact runtime identities, and each required model stage with its reason and required-versus-actual coverage. Provider and SWAN child rows are displayed independently so a failed current source or nest level is not hidden by a parent summary.
+
+`blocked` means an approved prerequisite is not available yet; `failed` means the attempted model data cannot be published; `stale` means retained last-good data remains available past its normal freshness window; `degraded` means a published result has an explicitly reported limitation; and `running` means an attempt is still in progress. The panel never starts, retries, or restarts a model. If model-health data is absent or malformed, it says so rather than treating it as healthy. A missing component revision is explicitly shown as **Unknown**.
+
+**Operator action guidance:** for `blocked` or waiting, read the named
+prerequisite and wait for the approved retry; for `running`, do not restart
+from this panel; for `failed`, inspect the stage reason and preserve the
+last-good result; for `stale`, recognize that retained last-good data is still
+being served; and for `degraded`, read the recorded limitation and coverage.
+`unknown` means the component supplied no evidence. This is guidance text,
+not an operator control. It matches the localized `help.admin.status.body` and
+`help.admin.status.tip` strings in `weewx_clearskies_config/translations/en.json`.
+
+The component matrix separately reports marine, API, dashboard, and Stack
+reachability/build state/revision. The marine service's current-forcing summary
+shows status, issue cycles, coverage, held-tail hours, and refusal. The panel
+does not contact the marine service directly, and this implementation has no
+CheckMK integration (`weewx_clearskies_config/admin/routes.py` and
+`templates/admin/status.html`).
+
 ### Managing SWAN+TruShore
 
 The **SWAN+TruShore** section shows current SWAN model status (binary availability, version, last run time, memory usage, and nested grid resolutions), lets you trigger a manual SWAN run, adjust OpenMP thread count and grid resolutions (outer and inner nest), and update per-spot surf settings (breaker formula and surf height display preference). Changes to per-spot settings take effect on the next SWAN run. For installation details see [§5 — Installation — weewx Extensions](#5-installation--weewx-extensions).

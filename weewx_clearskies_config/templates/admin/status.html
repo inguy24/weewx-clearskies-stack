@@ -162,6 +162,84 @@ table.status-inputs td, table.status-inputs th{padding:.35rem .6rem}
     </dl>
     {% endif %}
 
+    <h4>{{ _("Model health") }}</h4>
+    {% if marine_model_health_unavailable %}
+    <p class="status-note">{{ _("Model health is unavailable or malformed for this marine-service version.") }}</p>
+    {% elif not marine_model_health_reported %}
+    <p class="status-note">{{ _("Not reported by this version of the marine service.") }}</p>
+    {% else %}
+    <dl>
+      <dt>{{ _("Overall") }}</dt>
+      <dd>{{ marine_model_overall.state }}{% if marine_model_overall.reasons %} — {{ marine_model_overall.reasons | join(", ") }}{% endif %}</dd>
+      <dt>{{ _("Serving") }}</dt>
+      <dd>{{ marine_model_serving.state }}{% if marine_model_serving.reasons %} — {{ marine_model_serving.reasons | join(", ") }}{% endif %}</dd>
+      <dt>{{ _("Selected full cycle") }}</dt>
+      <dd>{{ marine_model_serving.selected_cycle if marine_model_serving.selected_cycle else _("Not reported") }}</dd>
+      <dt>{{ _("Model time / age") }}</dt>
+      <dd>{{ marine_model_serving.model_time if marine_model_serving.model_time else _("Not reported") }}{% if marine_model_serving.age_human %} · {{ marine_model_serving.age_human }}{% endif %}{% if marine_model_serving.age_seconds is not none %} <span class="status-note">({{ marine_model_serving.age_seconds }}s)</span>{% endif %}</dd>
+      <dt>{{ _("Valid-time range") }}</dt>
+      <dd>{{ marine_model_serving.first_valid if marine_model_serving.first_valid else _("Not reported") }} — {{ marine_model_serving.last_valid if marine_model_serving.last_valid else _("Not reported") }}</dd>
+      <dt>{{ _("Last-good fallback") }}</dt>
+      <dd>{{ _("Yes") if marine_model_serving.last_good_fallback else _("No") }}</dd>
+    </dl>
+
+    <h5>{{ _("Active attempt") if not marine_model_attempt_terminal else _("Latest terminal attempt") }}</h5>
+    {% if marine_model_attempt %}
+    <dl>
+      <dt>{{ _("Attempt") }}</dt><dd>{{ marine_model_attempt.attempt_id }}</dd>
+      <dt>{{ _("Kind / state") }}</dt><dd>{{ marine_model_attempt.kind }} / {{ marine_model_attempt.state }}</dd>
+      <dt>{{ _("Started") }}</dt><dd>{{ marine_model_attempt.started_at if marine_model_attempt.started_at else _("Not reported") }}</dd>
+      {% if marine_model_attempt_terminal %}<dt>{{ _("Ended") }}</dt><dd>{{ marine_model_attempt.ended_at if marine_model_attempt.ended_at else _("Not reported") }}</dd>{% endif %}
+      {% if marine_model_attempt.reasons %}<dt>{{ _("Reasons") }}</dt><dd>{{ marine_model_attempt.reasons | join(", ") }}</dd>{% endif %}
+    </dl>
+    {% if marine_model_runtime %}
+    <dl>
+      {% for row in marine_model_runtime %}
+      <dt>{{ row.name }}</dt><dd>{{ row.value }}</dd>
+      {% endfor %}
+    </dl>
+    {% endif %}
+    {% if marine_model_other_attempts %}
+    <h6>{{ _("Other latest attempts") }}</h6>
+    <ul class="status-reasons">{% for row in marine_model_other_attempts %}<li>{{ row.kind }} / {{ row.state }} — {{ row.attempt_id }}{% if row.reasons %}: {{ row.reasons | join(", ") }}{% endif %}</li>{% endfor %}</ul>
+    {% endif %}
+    {% else %}
+    <p class="status-note">{{ _("No active attempt.") }}</p>
+    {% endif %}
+
+    <h5>{{ _("Stage matrix") }}</h5>
+    <table class="status-inputs" role="table">
+      <thead><tr><th scope="col">{{ _("Stage") }}</th><th scope="col">{{ _("State / reason") }}</th><th scope="col">{{ _("Coverage") }}</th><th scope="col">{{ _("Source") }}</th></tr></thead>
+      <tbody>
+        {% for row in marine_model_stages %}
+        <tr>
+          <td>{{ row.name }}</td>
+          <td>{{ row.state }}{% if row.reasons %} — {{ row.reasons | join(", ") }}{% endif %}</td>
+          <td><span class="status-note">requiredStart=</span>{{ row.required_start if row.required_start else _("Not reported") }} — {{ row.required_end if row.required_end else _("Not reported") }}<br><span class="status-note">actualStart=</span>{{ row.actual_start if row.actual_start else _("Not reported") }} — {{ row.actual_end if row.actual_end else _("Not reported") }}</td>
+          <td>{{ row.source if row.source else _("Not reported") }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% if marine_model_current_forcing %}
+    <h5>{{ _("Current forcing") }}</h5>
+    <dl>
+      <dt>{{ _("Status") }}</dt><dd>{{ marine_model_current_forcing.status }}</dd>
+      <dt>{{ _("Issue cycles") }}</dt><dd>{{ marine_model_current_forcing.cycles | join(", ") if marine_model_current_forcing.cycles else _("Not reported") }}</dd>
+      <dt>{{ _("Coverage") }}</dt><dd>{{ marine_model_current_forcing.coverage_start if marine_model_current_forcing.coverage_start else _("Not reported") }} — {{ marine_model_current_forcing.coverage_end if marine_model_current_forcing.coverage_end else _("Not reported") }}</dd>
+      <dt>{{ _("Held tail") }}</dt><dd>{{ marine_model_current_forcing.held_tail_hours }}</dd>
+      <dt>{{ _("Refusal") }}</dt><dd>{{ marine_model_current_forcing.refusal if marine_model_current_forcing.refusal else _("None.") }}</dd>
+    </dl>
+    {% endif %}
+    {% if marine_component_matrix %}
+    <h5>{{ _("Component matrix") }}</h5>
+    <table class="status-inputs" role="table">
+      <thead><tr><th scope="col">{{ _("Component") }}</th><th scope="col">{{ _("Reachable") }}</th><th scope="col">{{ _("Build state") }}</th><th scope="col">{{ _("Revision") }}</th></tr></thead>
+      <tbody>{% for row in marine_component_matrix %}<tr><td>{{ row.name }}</td><td>{% if row.reachable is none %}{{ _("Unknown") }}{% else %}{{ _("Yes") if row.reachable else _("No") }}{% endif %}</td><td>{{ row.build_state }}</td><td>{{ row.revision if row.revision else _("Unknown") }}</td></tr>{% endfor %}</tbody>
+    </table>
+    {% endif %}
+    {% endif %}
+
     {% endif %}
   </section>
 {% endmacro %}
